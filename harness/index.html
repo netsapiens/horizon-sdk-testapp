@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>SRI tamper test</title>
+<style>
+  body { font: 14px/1.6 ui-monospace, monospace; margin: 24px; max-width: 900px; }
+  #steps { list-style: none; padding: 0; }
+  #steps li { padding: 6px 10px; border-left: 4px solid #ccc; margin-bottom: 4px; }
+  .ok { border-left-color: #1a7f37 !important; background: #e8f5ea; }
+  .fail { border-left-color: #b3261e !important; background: #fdeaea; }
+  #verdict { font-size: 20px; font-weight: bold; padding: 14px; margin-top: 18px; }
+</style>
+<h1>Subresource Integrity — tamper test</h1>
+<p>
+  Portal origin <code>:4101</code> loads a Module Federation remote from CDN origin
+  <code>:4102</code>, pinning <code>remoteEntry.js</code> with a hash the portal
+  computed itself. Chunk integrity comes from values webpack embedded inside the
+  pinned bytes.
+</p>
+<ol id="steps"></ol>
+<div id="verdict"></div>
+
+<script>
+  const stepsEl = document.getElementById('steps');
+  const results = [];
+
+  function step(label, ok, detail) {
+    results.push({ label, ok, detail });
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'fail';
+    li.textContent = `${ok ? 'PASS' : 'FAIL'} — ${label}` + (detail ? ` :: ${detail}` : '');
+    stepsEl.appendChild(li);
+    console.log(`[tamper-test] ${ok ? 'PASS' : 'FAIL'} ${label} :: ${detail || ''}`);
+  }
+
+  function loadScript(src, integrity) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      if (integrity) {
+        s.integrity = integrity;
+        // REQUIRED: without crossorigin the cross-origin response is opaque and
+        // the browser cannot verify it (it fails closed).
+        s.crossOrigin = 'anonymous';
+      }
+      s.onload = () => resolve();
+      // An SRI failure surfaces as this same generic error event — there is no
+      // distinguishable signal. That is exactly why design §3.11 needs a
+      // deliberate diagnostic fetch on the error path.
+      s.onerror = () => reject(new Error('script error event (network OR SRI)'));
+      document.head.appendChild(s);
+    });
+  }
+
+  (async () => {
+    const CDN = 'http://localhost:4102';
+    let pin;
+    try {
+      pin = (await (await fetch('/pin', { cache: 'no-store' })).json()).integrity;
+      step('portal supplied a pin', true, pin.slice(0, 24) + '…');
+    } catch (e) {
+      step('portal supplied a pin', false, e.message);
+      return;
+    }
+
+    // 1 — the host-level pin on remoteEntry.js
+    try {
+      await loadScript(`${CDN}/remoteEntry.js`, pin);
+      step('remoteEntry.js executed (pin matched)', true);
+    } catch (e) {
+      step('remoteEntry.js executed (pin matched)', false, e.message);
+      document.getElementById('verdict').textContent =
+        'REMOTE ENTRY REFUSED — host-level pin rejected the bytes.';
+      document.getElementById('verdict').className = 'fail';
+      document.title = 'REMOTEENTRY_REFUSED';
+      return;
+    }
+
+    const container = window.minimalRemote;
+    if (!container) {
+      step('container global present', false, 'window.minimalRemote missing');
+      return;
+    }
+    step('container global present', true);
+
+    // Empty share scope, so the shared-module fallback chunk loads too — one
+    // more chunk whose integrity gets exercised.
+    await container.init({});
+
+    // 2 — the transitive claim: chunks loaded by the pinned runtime
+    try {
+      const factory = await container.get('./mod');
+      const mod = factory();
+      const out = await (mod.run || mod.default.run)();
+      step('async chunk loaded and executed', out === 'HEAVY_CHUNK_EXECUTED', String(out));
+      document.getElementById('verdict').textContent = 'ALL CHUNKS ACCEPTED';
+      document.getElementById('verdict').className = 'ok';
+      document.title = 'CHUNKS_ACCEPTED';
+    } catch (e) {
+      step('async chunk loaded and executed', false, e.message);
+      document.getElementById('verdict').textContent =
+        'CHUNK REFUSED — embedded integrity rejected the tampered bytes.';
+      document.getElementById('verdict').className = 'fail';
+      document.title = 'CHUNK_REFUSED';
+    }
+  })();
+</script>
