@@ -1,7 +1,7 @@
 import log from 'loglevel';
 
 export async function run() {
-  log.info('[minimal-remote] exposed module invoked');
+  log.info('[minimal-remote] MATERIALLY DIFFERENT OUTPUT');
   const { heavy } = await import('./heavy.js');
   return heavy();
 }
