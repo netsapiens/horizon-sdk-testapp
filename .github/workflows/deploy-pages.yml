@@ -1,0 +1,126 @@
+name: Publish versioned bundle to GitHub Pages
+
+# Publishes dist/v<version>/ to the `gh-pages` branch, which GitHub Pages serves
+# as a CDN:
+#   https://<owner>.github.io/<repo>/v1.0.0/remoteEntry.js
+#
+# Pages sends `Access-Control-Allow-Origin: *`, which is what lets a Horizon host
+# load the bundle cross-origin AND lets Subresource Integrity verify it — SRI
+# cannot check an opaque response, so without CORS the pin silently does nothing.
+#
+# ⚠️ WHY gh-pages AND NOT actions/deploy-pages.
+#
+# The official Pages action publishes an ARTIFACT that REPLACES the entire site
+# on every deploy. Combined with webpack's `output.clean`, that makes every
+# previously published version 404 the moment a new one ships — which breaks the
+# pinned hash for every host still pointing at the old URL, and is exactly the
+# failure the immutable-URL requirement exists to prevent.
+#
+# `keep_files: true` on a gh-pages publish accumulates version directories
+# instead, so v1.0.0 keeps resolving, byte-identical, after v1.0.1 lands.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to push the gh-pages branch
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Read version
+        id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # ⚠️ IMMUTABILITY GUARD. `keep_files: true` accumulates directories but does
+      # NOT stop an existing one being overwritten — a push to main without a
+      # version bump would republish over v1.0.0 in place, silently changing bytes
+      # that hosts have already pinned. That is the exact thing immutable URLs are
+      # for, so it fails the build instead.
+      - name: Refuse to overwrite a published version
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages --depth=1
+            if git cat-file -e origin/gh-pages:"v${{ steps.v.outputs.version }}/remoteEntry.js" 2>/dev/null; then
+              echo "::error::v${{ steps.v.outputs.version }} is already published. Bump the version in package.json — a published bundle URL must never change bytes, because hosts have pinned its hash."
+              exit 1
+            fi
+          fi
+
+      - run: npm ci
+      - run: npm run build
+
+      # Checks the build against what the API enforces at submission. Catching it
+      # here beats a rejected submission.
+      #
+      # ⚠️ Inlined rather than `npx horizon-verify-bundle`, because that tool ships
+      # in @netsapiens/horizon-sdk 0.2.0 which is NOT PUBLISHED YET — npx resolves
+      # an older version, the bin is absent, and the step fails with "command not
+      # found". Replace this with the packaged tool once 0.2.0 is on npm; it checks
+      # considerably more than these three things.
+      - name: Check the bundle contract
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const dir = "dist/v" + require("./package.json").version;
+            const entry = fs.readFileSync(path.join(dir, "remoteEntry.js"), "utf8");
+            let bad = 0;
+            const fail = (m) => { console.error("::error::" + m); bad++; };
+
+            // 1. Chunk integrity values must be in the remote entry, or pinning the
+            //    entry validates a loader and nothing it loads.
+            const sri = entry.match(/sriHashes\s*=\s*(\{.*?\})/s);
+            const n = sri ? (sri[1].match(/sha(?:256|384|512)-/g) || []).length : 0;
+            if (!n) fail("remoteEntry.js carries no chunk integrity values — is webpack-subresource-integrity enabled with output.crossOriginLoading: \"anonymous\"?");
+            else console.log("chunk integrity values: " + n);
+
+            // 2. Every chunk the runtime can load must actually exist.
+            const map = entry.match(/\{((?:\s*\d+\s*:\s*"[A-Za-z0-9_\-]+"\s*,?)+)\}\s*\[[^\]]{1,40}\]\s*\+\s*"(\.[\w.]*js)"/);
+            if (map) {
+              for (const [, id, h] of map[1].matchAll(/(\d+)\s*:\s*"([A-Za-z0-9_\-]+)"/g)) {
+                const f = id + "." + h + map[2];
+                if (!fs.existsSync(path.join(dir, f))) fail("chunk referenced by the runtime is missing from the build: " + f);
+              }
+            }
+
+            // 3. Source maps must carry sourcesContent, or nothing can be attributed
+            //    to a file and the analysis rejects the bundle outright.
+            for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".js.map"))) {
+              const m = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+              if (!Array.isArray(m.sourcesContent) || !m.sourcesContent.length)
+                fail(f + " has no sourcesContent — do not set noSources");
+            }
+
+            if (bad) process.exit(1);
+            console.log("bundle contract OK");
+          '
+
+      # webpack emits _-prefixed files that Jekyll would strip.
+      - name: Disable Jekyll
+        run: touch dist/.nojekyll
+
+      - name: Publish
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          keep_files: true # accumulate versions; never replace the site
+          commit_message: 'publish v${{ steps.v.outputs.version }}'
+
+      - name: Where it landed
+        run: |
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/v${{ steps.v.outputs.version }}/remoteEntry.js"
