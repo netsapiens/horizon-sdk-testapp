@@ -64,16 +64,6 @@ jobs:
       # version bump would republish over v1.0.0 in place, silently changing bytes
       # that hosts have already pinned. That is the exact thing immutable URLs are
       # for, so it fails the build instead.
-      - name: Refuse to overwrite a published version
-        run: |
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            git fetch origin gh-pages --depth=1
-            if git cat-file -e origin/gh-pages:"v${{ steps.v.outputs.version }}/remoteEntry.js" 2>/dev/null; then
-              echo "::error::v${{ steps.v.outputs.version }} is already published. Bump the version in package.json — a published bundle URL must never change bytes, because hosts have pinned its hash."
-              exit 1
-            fi
-          fi
-
       - run: npm ci
       - run: npm run build
 
@@ -122,11 +112,50 @@ jobs:
             console.log("bundle contract OK");
           '
 
+      # ⚠️ IMMUTABILITY GUARD, and it compares BYTES rather than trusting the
+      # version number. `keep_files: true` stops a directory being deleted, not
+      # overwritten, so without this a push republishes over an existing version in
+      # place — silently changing bytes that hosts have already pinned.
+      #
+      # Three outcomes, and the distinction matters:
+      #
+      #   not yet published        -> publish
+      #   published, bytes same    -> skip, GREEN. A rebuild of unchanged sources,
+      #                               or a re-run. Nothing to do and nothing wrong.
+      #   published, bytes DIFFER  -> FAIL. This is the actual hazard: someone
+      #                               changed the bundle without bumping the
+      #                               version, and publishing would break every
+      #                               host pinned to that URL.
+      #
+      # An earlier version of this failed whenever the version already existed,
+      # without looking at the bytes. That turned every docs commit and every
+      # workflow edit into a red build, which is how people learn to ignore red
+      # builds — and this workflow's failures need to keep meaning something.
+      - name: Compare against what is already published
+        id: guard
+        run: |
+          V="v${{ steps.v.outputs.version }}"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1 || exit 0
+          git fetch origin gh-pages --depth=1 -q
+          git cat-file -e "origin/gh-pages:$V/remoteEntry.js" 2>/dev/null || exit 0
+
+          git cat-file -p "origin/gh-pages:$V/remoteEntry.js" > /tmp/published.js
+          if cmp -s /tmp/published.js "dist/$V/remoteEntry.js"; then
+            echo "$V is already published and the bytes are identical — nothing to do."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::$V is already published and this build produces DIFFERENT bytes. Bump the version in package.json. Republishing would change bytes at a URL hosts have already pinned, which breaks every extension using it."
+            exit 1
+          fi
+
       # webpack emits _-prefixed files that Jekyll would strip.
       - name: Disable Jekyll
+        if: steps.guard.outputs.publish == 'true'
         run: touch dist/.nojekyll
 
       - name: Publish
+        if: steps.guard.outputs.publish == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -136,4 +165,8 @@ jobs:
 
       - name: Where it landed
         run: |
-          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/v${{ steps.v.outputs.version }}/remoteEntry.js"
+          if [ "${{ steps.guard.outputs.publish }}" = "true" ]; then
+            echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/v${{ steps.v.outputs.version }}/remoteEntry.js"
+          else
+            echo "No publish — v${{ steps.v.outputs.version }} was already live with identical bytes."
+          fi
