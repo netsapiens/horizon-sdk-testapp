@@ -22,6 +22,19 @@ name: Publish versioned bundle to GitHub Pages
 on:
   push:
     branches: [main]
+    # ⚠️ Only what can change the emitted bundle.
+    #
+    # Without this, editing a README fails CI: the guard correctly refuses to
+    # republish a version that already exists, so any push that does not bump the
+    # version is a failure — including one that cannot possibly change the output.
+    # A red build for a typo fix trains people to ignore red builds, and this
+    # workflow's failures need to keep meaning something.
+    paths:
+      - 'src/**'
+      - 'webpack.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
