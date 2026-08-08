@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkhorizon_sdk_testapp=self.webpackChunkhorizon_sdk_testapp||[]).push([[915],{915(e,s,t){function n(){return"HEAVY_CHUNK_EXECUTED"}t.d(s,{heavy:()=>n})}}]);
+//# sourceMappingURL=915.a0dd00ddb15cdd7962d6.js.map

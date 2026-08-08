@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkhorizon_sdk_testapp=self.webpackChunkhorizon_sdk_testapp||[]).push([[44],{44(e,n,t){t.r(n),t.d(n,{run:()=>a});var s=t(315),o=t.n(s);async function a(){o().info("[minimal-remote] exposed module invoked");const{heavy:e}=await t.e(915).then(t.bind(t,915));return e()}const i={run:a};t.d(n,["default",0,i])}}]);
+//# sourceMappingURL=44.bee4650c829a9dd434b2.js.map
