@@ -3,7 +3,7 @@
 The process, verified end to end on this repo. A partner publishing their own
 extension follows the same five steps.
 
-Live: <https://netsapiens.github.io/horizon-sdk-testapp/v1.0.1/remoteEntry.js>
+Live: <https://netsapiens.github.io/horizon-sdk-testapp/v1.0.2/remoteEntry.js>
 
 ---
 
@@ -15,10 +15,19 @@ Live: <https://netsapiens.github.io/horizon-sdk-testapp/v1.0.1/remoteEntry.js>
 | 2 | CORS on the CDN | GitHub Pages sends `Access-Control-Allow-Origin: *` |
 | 3 | Chunk integrity values | `webpack-subresource-integrity` **and** `output.crossOriginLoading: 'anonymous'` |
 | 4 | Source maps with `sourcesContent` | `devtool: 'source-map'`, and do **not** set `noSources` |
-| 5 | Submit through the API | `POST /ui-extensions/:id/versions` — never send an `integrity_hash` |
+| 5 | Submit through the API | Automatic — the Registered Apps UI submits on save |
+| 6 | Expose the module as `./App` | `exposes: { './App': ... }` — the host requests this exact name |
 
-3 and 4 are checked in CI before publishing. 1 is enforced by the guard. 2 and 5
-cannot be checked from a local build.
+3, 4 and 6 are checked before publishing (`npm run verify`, and CI). 1 is enforced
+by the guard. 2 cannot be checked from a local build.
+
+5 is no longer a manual step: saving an app in Registered Apps submits the version
+by itself whenever the version or remote entry URL changes. A `curl` is only needed
+when there is no UI to hand — the form at the end of this file still works.
+
+⚠️ **Requirement 6 is not hypothetical.** v1.0.1 exposed `'./mod'`, passed every
+check here, and could never render: the host asks the container for `'./App'` and
+nothing else. A bundle can be perfectly verified and still be unloadable.
 
 ---
 
@@ -116,8 +125,8 @@ considerably more than the workflow's three assertions.
 ```bash
 curl -X POST "https://<portal>/ns-api/v2/ui-extensions/<id>/versions" \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"version":"1.0.1",
-       "remote_entry_url":"https://netsapiens.github.io/horizon-sdk-testapp/v1.0.1/remoteEntry.js"}'
+  -d '{"version":"1.0.2",
+       "remote_entry_url":"https://netsapiens.github.io/horizon-sdk-testapp/v1.0.2/remoteEntry.js"}'
 ```
 
 The origin must be on the platform's `approved_cdn_origins` allowlist —

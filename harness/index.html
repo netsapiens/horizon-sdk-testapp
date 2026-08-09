@@ -88,7 +88,7 @@
 
     // 2 — the transitive claim: chunks loaded by the pinned runtime
     try {
-      const factory = await container.get('./mod');
+      const factory = await container.get('./App');
       const mod = factory();
       const out = await (mod.run || mod.default.run)();
       step('async chunk loaded and executed', out === 'HEAVY_CHUNK_EXECUTED', String(out));
