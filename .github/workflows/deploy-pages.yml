@@ -1,172 +1,131 @@
-name: Publish versioned bundle to GitHub Pages
+name: Deploy to GitHub Pages
 
-# Publishes dist/v<version>/ to the `gh-pages` branch, which GitHub Pages serves
-# as a CDN:
-#   https://<owner>.github.io/<repo>/v1.0.0/remoteEntry.js
+# Builds the Module Federation remote and publishes dist/ to GitHub Pages, which
+# serves it as a CDN:
+#   https://netsapiens.github.io/horizon-sdk-testapp/remoteEntry.js
 #
-# Pages sends `Access-Control-Allow-Origin: *`, which is what lets a Horizon host
-# load the bundle cross-origin AND lets Subresource Integrity verify it — SRI
-# cannot check an opaque response, so without CORS the pin silently does nothing.
+# GitHub Pages sends `Access-Control-Allow-Origin: *`, which is what lets a
+# Horizon host load the bundle cross-origin AND lets Subresource Integrity verify
+# it — SRI cannot check an opaque response, so without CORS the pin silently does
+# nothing.
 #
-# ⚠️ WHY gh-pages AND NOT actions/deploy-pages.
+# ⚠️ A STABLE URL, OVERWRITTEN IN PLACE. This replaced a versioned-path scheme
+# (dist/v<version>/ published to a `gh-pages` branch with keep_files: true, plus a
+# byte-comparison guard). All of that existed to keep previously published
+# versions resolving forever, because the platform pins a hash of the exact bytes
+# at a URL. Once the URL stopped carrying the version there was nothing left to
+# accumulate, so the branch strategy and its guard went with it. This workflow is
+# now identical in shape to horizon-sdk-demo's.
 #
-# The official Pages action publishes an ARTIFACT that REPLACES the entire site
-# on every deploy. Combined with webpack's `output.clean`, that makes every
-# previously published version 404 the moment a new one ships — which breaks the
-# pinned hash for every host still pointing at the old URL, and is exactly the
-# failure the immutable-URL requirement exists to prevent.
+# The trade being made: overwriting this path DOES break every host still holding
+# the old pin until the new version is submitted and promoted. That window is
+# accepted deliberately — updates happen in maintenance windows, live sessions do
+# not re-fetch their bundles, and an SRI mismatch leaves the extension absent for
+# that session rather than breaking anything else. Weighed against an admin
+# hand-editing a URL on every release, this is the lower-risk option.
 #
-# `keep_files: true` on a gh-pages publish accumulates version directories
-# instead, so v1.0.0 keeps resolving, byte-identical, after v1.0.1 lands.
+# ⚠️ WHAT YOU MUST NOT FORGET: bump `version` in package.json whenever the bytes
+# change. It is now the integrity trigger. With a versioned URL, forgetting to
+# bump it produced an obvious 404. Here it produces silence — nothing re-verifies,
+# the stored hash stops matching what is served, and the app dies on next load
+# with no verdict and no finding to explain why. The guard below is the only thing
+# standing between a forgotten bump and that outcome.
 
 on:
   push:
     branches: [main]
-    # ⚠️ Only what can change the emitted bundle.
-    #
-    # Without this, editing a README fails CI: the guard correctly refuses to
-    # republish a version that already exists, so any push that does not bump the
-    # version is a failure — including one that cannot possibly change the output.
-    # A red build for a typo fix trains people to ignore red builds, and this
-    # workflow's failures need to keep meaning something.
-    paths:
-      - 'src/**'
-      - 'webpack.config.js'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
+# Allow the deploy job to publish to Pages via OIDC.
 permissions:
-  contents: write # needed to push the gh-pages branch
+  contents: read
+  pages: write
+  id-token: write
 
+# One in-flight deploy at a time; don't cancel a running publish.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The version guard below compares this build against the previous
+          # commit's, so it needs one commit of history beyond HEAD.
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: Read version
-        id: v
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      # ⚠️ IMMUTABILITY GUARD. `keep_files: true` accumulates directories but does
-      # NOT stop an existing one being overwritten — a push to main without a
-      # version bump would republish over v1.0.0 in place, silently changing bytes
-      # that hosts have already pinned. That is the exact thing immutable URLs are
-      # for, so it fails the build instead.
       - run: npm ci
       - run: npm run build
 
-      # Checks the build against what the API enforces at submission. Catching it
-      # here beats a rejected submission.
+      # The full contract checker shipped in @netsapiens/horizon-sdk. Catching a
+      # violation here beats a rejected submission.
       #
-      # ⚠️ Inlined rather than `npx horizon-verify-bundle`, because that tool ships
-      # in @netsapiens/horizon-sdk 0.2.0 which is NOT PUBLISHED YET — npx resolves
-      # an older version, the bin is absent, and the step fails with "command not
-      # found". Replace this with the packaged tool once 0.2.0 is on npm; it checks
-      # considerably more than these three things.
+      # ⚠️ Invoked with `node`, NOT `npx horizon-verify-bundle`. In SDK 0.2.0 the
+      # packaged bin silently no-ops and exits 0 — its main-module guard compared
+      # basename(argv[1]) against "verify-bundle", which is false once npm links it
+      # as "horizon-verify-bundle". A CI step calling it passes unconditionally.
+      # Fixed in 0.2.1; switch to npx once this repo is on it.
       - name: Check the bundle contract
+        run: npm run verify
+
+      # ⚠️ THE VERSION GUARD — the replacement for the old immutability guard, and
+      # the more important of the two.
+      #
+      # The old guard protected published bytes from being overwritten. Overwriting
+      # is now the intended behaviour, so that check is gone. What replaced it
+      # guards the thing that actually breaks now: bytes changing while `version`
+      # stays put. That combination silently invalidates the platform's stored hash
+      # for every host, with nothing in any UI to explain it.
+      #
+      # Compares against the PREVIOUS COMMIT rather than what is deployed, because
+      # a stable URL keeps no history to diff against — the live bytes are simply
+      # whatever shipped last.
+      - name: Refuse to ship changed bytes under an unchanged version
         run: |
-          node -e '
-            const fs = require("fs"), path = require("path");
-            const dir = "dist/v" + require("./package.json").version;
-            const entry = fs.readFileSync(path.join(dir, "remoteEntry.js"), "utf8");
-            let bad = 0;
-            const fail = (m) => { console.error("::error::" + m); bad++; };
+          PREV_VERSION=$(git show HEAD~1:package.json 2>/dev/null | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).version}catch(e){''}" || echo "")
+          THIS_VERSION=$(node -p "require('./package.json').version")
 
-            // 1. Chunk integrity values must be in the remote entry, or pinning the
-            //    entry validates a loader and nothing it loads.
-            const sri = entry.match(/sriHashes\s*=\s*(\{.*?\})/s);
-            const n = sri ? (sri[1].match(/sha(?:256|384|512)-/g) || []).length : 0;
-            if (!n) fail("remoteEntry.js carries no chunk integrity values — is webpack-subresource-integrity enabled with output.crossOriginLoading: \"anonymous\"?");
-            else console.log("chunk integrity values: " + n);
-
-            // 2. Every chunk the runtime can load must actually exist.
-            const map = entry.match(/\{((?:\s*\d+\s*:\s*"[A-Za-z0-9_\-]+"\s*,?)+)\}\s*\[[^\]]{1,40}\]\s*\+\s*"(\.[\w.]*js)"/);
-            if (map) {
-              for (const [, id, h] of map[1].matchAll(/(\d+)\s*:\s*"([A-Za-z0-9_\-]+)"/g)) {
-                const f = id + "." + h + map[2];
-                if (!fs.existsSync(path.join(dir, f))) fail("chunk referenced by the runtime is missing from the build: " + f);
-              }
-            }
-
-            // 3. Source maps must carry sourcesContent, or nothing can be attributed
-            //    to a file and the analysis rejects the bundle outright.
-            for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".js.map"))) {
-              const m = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-              if (!Array.isArray(m.sourcesContent) || !m.sourcesContent.length)
-                fail(f + " has no sourcesContent — do not set noSources");
-            }
-
-            if (bad) process.exit(1);
-            console.log("bundle contract OK");
-          '
-
-      # ⚠️ IMMUTABILITY GUARD, and it compares BYTES rather than trusting the
-      # version number. `keep_files: true` stops a directory being deleted, not
-      # overwritten, so without this a push republishes over an existing version in
-      # place — silently changing bytes that hosts have already pinned.
-      #
-      # Three outcomes, and the distinction matters:
-      #
-      #   not yet published        -> publish
-      #   published, bytes same    -> skip, GREEN. A rebuild of unchanged sources,
-      #                               or a re-run. Nothing to do and nothing wrong.
-      #   published, bytes DIFFER  -> FAIL. This is the actual hazard: someone
-      #                               changed the bundle without bumping the
-      #                               version, and publishing would break every
-      #                               host pinned to that URL.
-      #
-      # An earlier version of this failed whenever the version already existed,
-      # without looking at the bytes. That turned every docs commit and every
-      # workflow edit into a red build, which is how people learn to ignore red
-      # builds — and this workflow's failures need to keep meaning something.
-      - name: Compare against what is already published
-        id: guard
-        run: |
-          V="v${{ steps.v.outputs.version }}"
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-          git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1 || exit 0
-          git fetch origin gh-pages --depth=1 -q
-          git cat-file -e "origin/gh-pages:$V/remoteEntry.js" 2>/dev/null || exit 0
-
-          git cat-file -p "origin/gh-pages:$V/remoteEntry.js" > /tmp/published.js
-          if cmp -s /tmp/published.js "dist/$V/remoteEntry.js"; then
-            echo "$V is already published and the bytes are identical — nothing to do."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::$V is already published and this build produces DIFFERENT bytes. Bump the version in package.json. Republishing would change bytes at a URL hosts have already pinned, which breaks every extension using it."
-            exit 1
+          if [ -z "$PREV_VERSION" ]; then
+            echo "No previous package.json (first build?) — nothing to compare."
+            exit 0
           fi
+          if [ "$PREV_VERSION" != "$THIS_VERSION" ]; then
+            echo "version bumped: $PREV_VERSION -> $THIS_VERSION"
+            exit 0
+          fi
+
+          # Same version. That is only acceptable if this push cannot have changed
+          # the emitted bundle. Anything under src/ or the build config can.
+          if git diff --quiet HEAD~1 HEAD -- src webpack.config.js package.json package-lock.json; then
+            echo "version unchanged ($THIS_VERSION), but nothing that affects the bundle changed either."
+            exit 0
+          fi
+
+          echo "::error::Bundle inputs changed but the version is still $THIS_VERSION. The remote entry URL is stable, so the platform cannot tell these bytes apart from the ones it already hashed — nothing would re-verify, and the stored SRI hash would stop matching what is served. Every host would fail to load this extension on next page load, with no verdict and no finding to explain it. Bump the version in package.json."
+          exit 1
 
       # webpack emits _-prefixed files that Jekyll would strip.
       - name: Disable Jekyll
-        if: steps.guard.outputs.publish == 'true'
         run: touch dist/.nojekyll
 
-      - name: Publish
-        if: steps.guard.outputs.publish == 'true'
-        uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          keep_files: true # accumulate versions; never replace the site
-          commit_message: 'publish v${{ steps.v.outputs.version }}'
+          path: dist
 
-      - name: Where it landed
-        run: |
-          if [ "${{ steps.guard.outputs.publish }}" = "true" ]; then
-            echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/v${{ steps.v.outputs.version }}/remoteEntry.js"
-          else
-            echo "No publish — v${{ steps.v.outputs.version }} was already live with identical bytes."
-          fi
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

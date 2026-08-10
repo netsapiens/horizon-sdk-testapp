@@ -8,7 +8,6 @@ const path = require('path');
 const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPlugin');
 const { SubresourceIntegrityPlugin } = require('webpack-subresource-integrity');
 
-const VERSION = require('./package.json').version;
 
 module.exports = (_env, argv) => ({
   mode: argv.mode || 'production',
@@ -21,7 +20,23 @@ module.exports = (_env, argv) => ({
   // even though App is what the host actually loads.
   entry: './src/index.js',
   output: {
-    path: path.resolve(__dirname, 'dist', `v${VERSION}`),
+    // ⚠️ A STABLE PATH — the URL never carries the version.
+    //
+    // The platform pins a SHA-384 of these exact bytes, so overwriting this path
+    // DOES break every host still holding the old pin, until the new version is
+    // submitted and promoted. That trade was made deliberately: updates happen in
+    // maintenance windows, live sessions do not re-fetch, and an SRI mismatch
+    // merely leaves the extension absent for that session rather than breaking
+    // anything. Weighed against an admin hand-editing a URL on every release, the
+    // fixed path is the lower-risk option.
+    //
+    // ⚠️ THE CONSEQUENCE: the VERSION FIELD is now the integrity trigger. With a
+    // versioned URL, forgetting to bump it 404s and is obvious. Here, publishing
+    // new bytes without changing the version means nothing re-verifies, the stored
+    // hash silently stops matching what is served, and the app dies on next load
+    // with no verdict and no finding to explain it. Bump the version every time
+    // the bytes change.
+    path: path.resolve(__dirname, 'dist'),
     publicPath: 'auto',
     filename: '[name].[contenthash].js',
     chunkFilename: '[id].[contenthash].js',
