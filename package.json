@@ -5,10 +5,11 @@
   "description": "Minimal Module Federation remote for validating the Horizon bundle-verification build contract, and for exercising the SRI tamper test end to end.",
   "scripts": {
     "build": "webpack --mode production",
-    "verify": "node ../netsapiens-monorepo/packages/horizon-sdk/scripts/verify-bundle.mjs ./dist/v$npm_package_version",
+    "verify": "node node_modules/@netsapiens/horizon-sdk/scripts/verify-bundle.mjs ./dist/v$npm_package_version",
     "harness": "node harness/serve.js"
   },
   "dependencies": {
+    "@netsapiens/horizon-sdk": "^0.2.0",
     "loglevel": "^1.9.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

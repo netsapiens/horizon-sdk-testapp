@@ -10,15 +10,27 @@
 // testapp is to exercise the bundle-verification contract with the smallest
 // possible toolchain, so nothing here should need a transform. React.createElement
 // aliased to `h` is the whole compromise.
+//
+// Registration goes through @netsapiens/horizon-sdk, the same path a partner
+// uses. Emitting on the event bus directly would test the host's internal
+// contract rather than the one anybody actually writes against.
 import React from 'react';
 import log from 'loglevel';
+import { useRemoteApp } from '@netsapiens/horizon-sdk';
 
 const h = React.createElement;
 
-// Must match the id the platform derives from the Module Federation name
-// (`minimalRemote` → `minimal-remote`), which is also the registered extension
-// id. The host RE-STAMPS appId from the scoped-bus binding rather than trusting
-// this, so it is here for log readability, not for authorization.
+// ⚠️ The MODULE FEDERATION NAME, not the app id.
+//
+// useRemoteApp() takes this and derives the app id itself (deriveAppId:
+// `minimalRemote` → `minimal-remote`), using the same rule the platform applies
+// when it derives an extension's id from webpack_module. Passing the raw MF name
+// is what puts that derivation under test — hardcoding the derived id would let
+// the two drift apart silently, which is precisely the kind of mismatch this app
+// exists to catch.
+const MF_NAME = 'minimalRemote';
+
+// For log lines only. Anything authorization-shaped uses the id the host stamps.
 const APP_ID = 'minimal-remote';
 
 // ---------------------------------------------------------------------------
@@ -122,12 +134,10 @@ function HeaderButton() {
  * Everything this app contributes to the host, in one table so a reviewer can
  * see the whole surface without reading the effect below.
  *
- * Registration goes straight down the event bus rather than through
- * @netsapiens/horizon-sdk, because that package is not published to npm yet.
- * The SDK's registerRoute/registerDynamicExtension are thin wrappers over
- * exactly these two emits, so this is the same contract, just without the
- * convenience layer — and it keeps the testapp's dependency list honest about
- * what the build actually needs.
+ * Registered through @netsapiens/horizon-sdk, exactly as a partner would. The
+ * SDK is a normal bundled dependency and must NEVER appear in webpack `shared`
+ * — the host does not register it as a shared module, and the verifier rejects
+ * a bundle that declares it.
  */
 const ROUTES = [
   {
@@ -190,40 +200,51 @@ export async function run() {
  * which is the documented shape for a Horizon extension entry point.
  */
 export default function App(horizonContext) {
-  const eventBus = horizonContext && horizonContext.eventBus;
+  // ⚠️ REGISTER THROUGH THE SDK, NOT BY EMITTING ON THE EVENT BUS.
+  //
+  // The raw `eventBus.emit('route:register', ...)` calls this used to make are
+  // the HOST's contract, not the partner's — no real extension is written that
+  // way. Going straight to the bus skips everything the SDK does on the way
+  // past: validateRouteConfig() refusing a malformed route with a log instead of
+  // an emit, appId derivation, unregister bookkeeping. A test app that bypasses
+  // that layer can pass while every partner's code fails, and the reverse.
+  const { sdk } = useRemoteApp(horizonContext, MF_NAME);
 
   React.useEffect(
     function register() {
-      if (!eventBus || typeof eventBus.emit !== 'function') {
-        // Loud, because the failure is otherwise invisible: the bundle verifies,
-        // the component mounts, and simply nothing appears in the UI.
-        log.error('[' + APP_ID + '] no eventBus on horizonContext — nothing can register');
-        return undefined;
-      }
+      let cancelled = false;
 
-      ROUTES.forEach(function (route) {
-        eventBus.emit('route:register', Object.assign({ appId: APP_ID }, route));
-      });
-      EXTENSIONS.forEach(function (ext) {
-        eventBus.emit('dynamic-extension:register', Object.assign({ appId: APP_ID }, ext));
-      });
-
-      log.info(
-        '[' + APP_ID + '] registered ' + ROUTES.length + ' routes, ' +
-          EXTENSIONS.length + ' zone extensions',
-      );
+      // registerRoute is async — it validates before emitting. Sequenced rather
+      // than fired in parallel so the log reads in registration order when
+      // something is rejected.
+      (async function registerAll() {
+        for (const route of ROUTES) {
+          if (cancelled) return;
+          await sdk.registerRoute(route);
+        }
+        EXTENSIONS.forEach(function (ext) {
+          if (!cancelled) sdk.registerDynamicExtension(ext);
+        });
+        if (!cancelled) {
+          log.info(
+            '[' + APP_ID + '] registered ' + ROUTES.length + ' routes, ' +
+              EXTENSIONS.length + ' zone extensions via SDK',
+          );
+        }
+      })();
 
       // Unregister on unmount, or a remount duplicates every menu entry.
       return function cleanup() {
+        cancelled = true;
         ROUTES.forEach(function (route) {
-          eventBus.emit('route:unregister', { id: route.id });
+          sdk.unregisterRoute(route.id);
         });
         EXTENSIONS.forEach(function (ext) {
-          eventBus.emit('dynamic-extension:unregister', { id: ext.id });
+          sdk.unregisterDynamicExtension(ext.id);
         });
       };
     },
-    [eventBus],
+    [sdk],
   );
 
   return null;

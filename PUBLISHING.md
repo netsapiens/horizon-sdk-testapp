@@ -111,12 +111,15 @@ npm run build
 npm run verify     # the full contract checker
 ```
 
-`npm run verify` currently runs the checker out of the monorepo working copy,
-because `@netsapiens/horizon-sdk@0.2.0` — which ships it as
-`horizon-verify-bundle` — is **not published to npm yet**. Once it is, this
-becomes `npx horizon-verify-bundle ./dist/v$npm_package_version` and the inline
-check in the workflow can be replaced with it; the packaged tool checks
-considerably more than the workflow's three assertions.
+`npm run verify` runs the checker shipped in `@netsapiens/horizon-sdk`, so it
+needs no path outside this repo.
+
+⚠️ It invokes the script with `node` rather than `npx horizon-verify-bundle`.
+In 0.2.0 the packaged bin silently no-ops — its main-module guard compared the
+basename of `argv[1]` against `verify-bundle`, which is false when npm links it
+as `horizon-verify-bundle`, so the CLI never ran and exited 0. Fixed in 0.2.1;
+once this repo is on 0.2.1 the script and the CI step can both become
+`npx horizon-verify-bundle ./dist/v<version>`.
 
 ---
 
