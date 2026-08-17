@@ -18,6 +18,13 @@ import React from 'react';
 import log from 'loglevel';
 import { useRemoteApp } from '@netsapiens/horizon-sdk';
 
+import {
+  EXTENSIONS,
+  ROUTES as ZONE_ROUTES,
+  buildColumn,
+  manifest,
+} from './integration/zones.js';
+
 const h = React.createElement;
 
 // ⚠️ The MODULE FEDERATION NAME, not the app id.
@@ -80,101 +87,31 @@ function TestPage(props) {
   );
 }
 
-function HomePage() {
-  return h(TestPage, { title: 'SDK Test App — My Account', where: '/home' });
+
+// One page component per registered route, titled from the route it serves so a
+// human landing on it can tell which navigation zone let it through.
+function pageFor(route) {
+  function Page() {
+    return h(TestPage, {
+      title: 'SDK Test App — ' + route.parentPath,
+      where: route.parentPath + '/' + route.path,
+      testId: route.testId,
+    });
+  }
+  Page.displayName = 'TestAppPage(' + route.id + ')';
+  return Page;
 }
 
-function ManagePage() {
-  return h(TestPage, { title: 'SDK Test App — Manage', where: '/manage' });
-}
+// Routes carry their page component; the zone extensions and the dynamic column
+// come ready-built from integration/zones.js.
+const ROUTES = ZONE_ROUTES.map(function (r) {
+  return Object.assign({}, r, { component: pageFor(r) });
+});
 
-// ---------------------------------------------------------------------------
-// Zone extensions
-// ---------------------------------------------------------------------------
+// Built once at module scope, not per render: registerDynamicColumn stores the
+// object, and a fresh identity on every render would churn the host's registry.
+const column = buildColumn();
 
-/**
- * Row action for a datagrid. `props.context` carries the row the host is
- * rendering this against.
- */
-function RowActionButton(props) {
-  const ctx = props.context || {};
-  return h(
-    'button',
-    {
-      type: 'button',
-      title: 'Injected by ' + APP_ID,
-      onClick: function () {
-        log.info('[' + APP_ID + '] row action fired', ctx.params || {});
-      },
-      style: { cursor: 'pointer' },
-    },
-    '★',
-  );
-}
-
-/** Button injected into a page's header action area. */
-function HeaderButton() {
-  return h(
-    'button',
-    {
-      type: 'button',
-      onClick: function () {
-        log.info('[' + APP_ID + '] header action fired');
-      },
-    },
-    'Test App Action',
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-
-/**
- * Everything this app contributes to the host, in one table so a reviewer can
- * see the whole surface without reading the effect below.
- *
- * Registered through @netsapiens/horizon-sdk, exactly as a partner would. The
- * SDK is a normal bundled dependency and must NEVER appear in webpack `shared`
- * — the host does not register it as a shared module, and the verifier rejects
- * a bundle that declares it.
- */
-const ROUTES = [
-  {
-    id: APP_ID + '.home-page',
-    parentPath: '/home',
-    path: 'sdk-testapp',
-    label: 'SDK Test App',
-    icon: 'mdi:test-tube',
-    component: HomePage,
-  },
-  {
-    id: APP_ID + '.manage-page',
-    parentPath: '/manage',
-    path: 'sdk-testapp',
-    label: 'SDK Test App',
-    icon: 'mdi:test-tube',
-    component: ManagePage,
-  },
-];
-
-const EXTENSIONS = [
-  {
-    id: APP_ID + '.row-action',
-    zone: 'table-row-actions',
-    // Prefix match: any /manage page carrying a datagrid. Broad on purpose —
-    // this is a probe for whether row-action injection works at all, not a
-    // feature aimed at one table.
-    routes: [{ pattern: '/manage' }],
-    component: RowActionButton,
-  },
-  {
-    id: APP_ID + '.header-action',
-    zone: 'page-header-actions',
-    routes: [{ pattern: '/home' }],
-    component: HeaderButton,
-  },
-];
 
 /**
  * Force the lazy chunk to load, and return a stable marker.
@@ -225,10 +162,14 @@ export default function App(horizonContext) {
         EXTENSIONS.forEach(function (ext) {
           if (!cancelled) sdk.registerDynamicExtension(ext);
         });
+        // The dynamic column is a THIRD registration kind, not a zone extension:
+        // the host merges it into a DataTable rather than mounting it into a
+        // zone, so it goes through its own SDK call and its own teardown.
+        if (!cancelled) sdk.registerDynamicColumn(column);
         if (!cancelled) {
           log.info(
             '[' + APP_ID + '] registered ' + ROUTES.length + ' routes, ' +
-              EXTENSIONS.length + ' zone extensions via SDK',
+              EXTENSIONS.length + ' zone extensions, 1 dynamic column via SDK',
           );
         }
       })();
@@ -242,6 +183,7 @@ export default function App(horizonContext) {
         EXTENSIONS.forEach(function (ext) {
           sdk.unregisterDynamicExtension(ext.id);
         });
+        sdk.unregisterDynamicColumn(column.id);
       };
     },
     [sdk],

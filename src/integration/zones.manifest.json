@@ -1,0 +1,137 @@
+{
+  "$comment": "Canonical map of every surface this test app contributes to a Horizon host: SDK zone extensions, full-page routes, and one dynamic table column. Single source of truth shared by the app (src/integration/zones.js drives registration from it) and the netsapiens-horizon-testing Playwright suite (asserts each testId mounts). testId scheme: extensions 'sdk-testapp-ext-<id minus the app prefix>', routes 'sdk-testapp-page-<slug>', columns 'sdk-testapp-col-<field>'. Each injected extension is also tagged with data-zone. The testId + data-zone ride on each widget's OWN root element (no wrapper), so the marker is a real, visible box — assert VISIBILITY (toBeVisible). A component that renders null (an inactive zone) has no marker, which is the accurate signal. 'version' mirrors package.json and is the value to register the app under: the remote entry URL is stable, so the registered version is the only thing that tells Horizon to re-verify the bytes at that URL.",
+  "appId": "minimal-remote",
+  "webpackModule": "minimalRemote",
+  "remoteEntryUrl": "https://netsapiens.github.io/horizon-sdk-testapp/remoteEntry.js",
+  "version": "1.1.0",
+
+  "$zoneCoverage": "All 12 INJECTABLE zones in the host catalogue (SDKSettings.tsx ZONE_CATALOGUE). The other 5 catalogue entries are Navigation zones, which are not injection points — they gate which nav sections an app may add PAGES to, and are covered by 'routes' below. nav-marketplace is reserved to the built-in marketplace and can never be covered by a third-party app.",
+
+  "extensions": [
+    {
+      "id": "testapp-header-action",
+      "zone": "page-header-actions",
+      "routes": ["/manage/call-logs", "/manage/*/users", "/manage/*/contacts"],
+      "testId": "sdk-testapp-ext-header-action",
+      "label": "Header action button"
+    },
+    {
+      "id": "testapp-header-badge",
+      "zone": "page-header-secondary",
+      "routes": ["/manage/call-logs", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-header-badge",
+      "label": "Secondary header badge"
+    },
+    {
+      "id": "testapp-content-panel",
+      "zone": "page-content-after",
+      "routes": ["/manage/call-logs", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-content-panel",
+      "label": "Panel appended after page content"
+    },
+    {
+      "id": "testapp-sidetray-panel",
+      "zone": "sidetray",
+      "routes": ["/manage/*/users", "/manage/*/contacts"],
+      "testId": "sdk-testapp-ext-sidetray-panel",
+      "label": "Side-tray section",
+      "$note": "Not covered by horizon-sdk-demo — this zone had no test coverage before the testapp cutover."
+    },
+    {
+      "id": "testapp-table-toolbar",
+      "zone": "table-toolbar",
+      "routes": ["/manage/call-logs", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-table-toolbar",
+      "label": "Table toolbar item"
+    },
+    {
+      "id": "testapp-table-filter",
+      "zone": "table-filter-bar",
+      "routes": ["/manage/call-logs", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-table-filter",
+      "label": "Table filter-bar control"
+    },
+    {
+      "id": "testapp-row-action",
+      "zone": "table-row-actions",
+      "routes": ["/manage/call-logs", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-row-action",
+      "label": "Per-row action button"
+    },
+    {
+      "id": "testapp-topbar-help",
+      "zone": "topbar-actions",
+      "routes": ["/*"],
+      "testId": "sdk-testapp-ext-topbar-help",
+      "label": "Global top-bar action"
+    },
+    {
+      "id": "testapp-caller-card",
+      "zone": "inbound-call-content",
+      "routes": ["/*"],
+      "testId": "sdk-testapp-ext-caller-card",
+      "label": "Inbound-call content card",
+      "$state": "Requires a live ringing call to render — the suite marks this fixme rather than faking call state."
+    },
+    {
+      "id": "testapp-form-before",
+      "zone": "form-section-before",
+      "routes": ["/manage/*/contacts", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-form-before",
+      "label": "Banner above a form section"
+    },
+    {
+      "id": "testapp-form-after",
+      "zone": "form-section-after",
+      "routes": ["/manage/*/contacts", "/manage/*/users"],
+      "testId": "sdk-testapp-ext-form-after",
+      "label": "Checkbox below a form section"
+    }
+  ],
+
+  "routes": [
+    {
+      "id": "testapp-apps-page",
+      "navZone": "nav-apps",
+      "parentPath": "/apps",
+      "path": "sdk-testapp",
+      "fullPath": "/apps/sdk-testapp",
+      "testId": "sdk-testapp-page-apps"
+    },
+    {
+      "id": "testapp-manage-page",
+      "navZone": "nav-manage",
+      "parentPath": "/manage",
+      "path": "sdk-testapp",
+      "fullPath": "/manage/sdk-testapp",
+      "testId": "sdk-testapp-page-manage"
+    },
+    {
+      "id": "testapp-platform-page",
+      "navZone": "nav-platform",
+      "parentPath": "/platform",
+      "path": "sdk-testapp",
+      "fullPath": "/platform/sdk-testapp",
+      "testId": "sdk-testapp-page-platform"
+    },
+    {
+      "id": "testapp-home-page",
+      "navZone": "nav-home",
+      "parentPath": "/home",
+      "path": "sdk-testapp",
+      "fullPath": "/home/sdk-testapp",
+      "testId": "sdk-testapp-page-home"
+    }
+  ],
+
+  "columns": [
+    {
+      "id": "testapp-marker-column",
+      "zone": "call-logs-columns",
+      "field": "testapp-marker",
+      "routes": ["/manage/call-logs", "/manage/*/call-logs"],
+      "testId": "sdk-testapp-col-testapp-marker",
+      "$note": "The host's DataTable derives the `call-logs-columns` zone from the route and merges registered columns into the grid. `table-columns` is the catalogue's name for the capability; `call-logs-columns` is the concrete zone id the host emits for this page."
+    }
+  ]
+}

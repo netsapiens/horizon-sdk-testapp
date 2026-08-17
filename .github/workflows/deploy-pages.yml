@@ -112,6 +112,22 @@ jobs:
           echo "::error::Bundle inputs changed but the version is still $THIS_VERSION. The remote entry URL is stable, so the platform cannot tell these bytes apart from the ones it already hashed — nothing would re-verify, and the stored SRI hash would stop matching what is served. Every host would fail to load this extension on next page load, with no verdict and no finding to explain it. Bump the version in package.json."
           exit 1
 
+      # The Playwright suite in netsapiens-horizon-testing registers this app
+      # using the version from zones.manifest.json, NOT from package.json. If the
+      # two drift, the suite registers a version the platform has already judged
+      # against different bytes: nothing re-verifies, and the stored pin stops
+      # matching what is served. Same failure as the check above, reached from the
+      # other side, and invisible until every host stops loading the extension.
+      - name: Manifest version matches package.json
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          MAN=$(node -p "require('./src/integration/zones.manifest.json').version")
+          if [ "$PKG" != "$MAN" ]; then
+            echo "::error::zones.manifest.json version ($MAN) does not match package.json ($PKG). The suite registers under the MANIFEST version, so a drift registers bytes the platform never re-verified."
+            exit 1
+          fi
+          echo "manifest and package.json agree: $PKG"
+
       # webpack emits _-prefixed files that Jekyll would strip.
       - name: Disable Jekyll
         run: touch dist/.nojekyll
