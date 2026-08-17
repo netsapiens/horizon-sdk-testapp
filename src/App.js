@@ -23,6 +23,7 @@ import {
   ROUTES as ZONE_ROUTES,
   buildColumn,
   manifest,
+  sdkRef,
 } from './integration/zones.js';
 
 const h = React.createElement;
@@ -150,6 +151,10 @@ export default function App(horizonContext) {
   React.useEffect(
     function register() {
       let cancelled = false;
+
+      // Hand the SDK to the zone widgets. The header action uses it to open the
+      // side tray, which is the only way the `sidetray` zone gets a mount point.
+      sdkRef.current = sdk;
 
       // registerRoute is async — it validates before emitting. Sequenced rather
       // than fired in parallel so the log reads in registration order when

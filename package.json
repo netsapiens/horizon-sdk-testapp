@@ -1,6 +1,6 @@
 {
   "name": "horizon-sdk-testapp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Minimal Module Federation remote for validating the Horizon bundle-verification build contract, and for exercising the SRI tamper test end to end.",
   "scripts": {

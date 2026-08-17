@@ -19,6 +19,22 @@ const h = React.createElement;
 
 export { manifest };
 
+/**
+ * The live SDK instance, set by App.js once useRemoteApp() has produced it.
+ *
+ * A zone widget needs the SDK to OPEN THE SIDE TRAY, and it cannot get there any
+ * other way: the host mounts the `sidetray` zone only inside a panel that
+ * something has opened (SdkSidePanel.tsx — "the zone has no fixed mount point"),
+ * and the extension context the host passes a widget carries route/user/ui/theme
+ * but no SDK handle. The alternative is emitting `side-panel:open` on the event
+ * bus directly, which is the HOST's contract rather than a partner's — the exact
+ * shortcut the registration comment in App.js exists to forbid.
+ *
+ * A ref rather than an import because the components are built at module load,
+ * before any SDK exists.
+ */
+export const sdkRef = { current: null };
+
 /** Look up a manifest entry by id, across all three collections. */
 function entry(id) {
   const all = [].concat(manifest.extensions, manifest.routes, manifest.columns);
@@ -80,6 +96,12 @@ function chipWidget(id, label, tag) {
           title: 'Injected by ' + manifest.appId + ' into ' + entry(id).zone,
           onClick: function () {
             log.info('[' + manifest.appId + '] ' + id + ' fired', ctx.params || {});
+            // The header action doubles as the side-tray opener — see sdkRef.
+            // Declarative open (no `component`), which is what makes the host
+            // render whatever is registered to the `sidetray` zone.
+            if (id === 'testapp-header-action' && sdkRef.current) {
+              sdkRef.current.openSidePanel({ title: 'SDK Test App' });
+            }
           },
           style: CHIP,
         },
