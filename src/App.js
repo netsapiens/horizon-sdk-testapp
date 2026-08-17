@@ -46,11 +46,16 @@ const APP_ID = 'minimal-remote';
 // ---------------------------------------------------------------------------
 
 /**
- * Shared body for both registered pages.
+ * Shared body for every registered page.
  *
  * Pulls in ./heavy.js on demand. That dynamic import is the reason this app has
  * more than one chunk, which is what makes it a real test of chunk integrity:
  * pinning only remoteEntry.js would verify a loader and nothing it loads.
+ *
+ * ⚠️ The root carries `data-testid` from the manifest. Without it a route
+ * registers, navigates and renders correctly while the suite reports
+ * "element not found" — indistinguishable from the route never mounting, which
+ * is the single most misleading failure this app can produce.
  */
 function TestPage(props) {
   const [heavyResult, setHeavyResult] = React.useState('not loaded');
@@ -66,7 +71,7 @@ function TestPage(props) {
 
   return h(
     'div',
-    { style: { padding: 24 } },
+    { style: { padding: 24 }, 'data-testid': props.testId },
     h('h2', null, props.title),
     h(
       'p',

@@ -3,7 +3,7 @@
   "appId": "minimal-remote",
   "webpackModule": "minimalRemote",
   "remoteEntryUrl": "https://netsapiens.github.io/horizon-sdk-testapp/remoteEntry.js",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "$zoneCoverage": "All 12 INJECTABLE zones in the host catalogue (SDKSettings.tsx ZONE_CATALOGUE). The other 5 catalogue entries are Navigation zones, which are not injection points \u2014 they gate which nav sections an app may add PAGES to, and are covered by 'routes' below. nav-marketplace is reserved to the built-in marketplace and can never be covered by a third-party app.",
   "extensions": [
     {
