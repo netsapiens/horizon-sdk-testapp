@@ -1,6 +1,6 @@
 {
   "name": "horizon-sdk-testapp",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "private": true,
   "description": "Minimal Module Federation remote for validating the Horizon bundle-verification build contract, and for exercising the SRI tamper test end to end.",
   "scripts": {
@@ -9,7 +9,7 @@
     "harness": "node harness/serve.js"
   },
   "dependencies": {
-    "@netsapiens/horizon-sdk": "^0.2.0",
+    "@netsapiens/horizon-sdk": "^0.2.6",
     "loglevel": "^1.9.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

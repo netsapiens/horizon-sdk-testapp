@@ -1,10 +1,10 @@
 {
-  "$comment": "Canonical map of every surface this test app contributes to a Horizon host: SDK zone extensions, full-page routes, and one dynamic table column. Single source of truth shared by the app (src/integration/zones.js drives registration from it) and the netsapiens-horizon-testing Playwright suite (asserts each testId mounts). testId scheme: extensions 'sdk-testapp-ext-<id minus the app prefix>', routes 'sdk-testapp-page-<slug>', columns 'sdk-testapp-col-<field>'. Each injected extension is also tagged with data-zone. The testId + data-zone ride on each widget's OWN root element (no wrapper), so the marker is a real, visible box \u2014 assert VISIBILITY (toBeVisible). A component that renders null (an inactive zone) has no marker, which is the accurate signal. 'version' mirrors package.json and is the value to register the app under: the remote entry URL is stable, so the registered version is the only thing that tells Horizon to re-verify the bytes at that URL.",
+  "$comment": "Canonical map of every surface this test app contributes to a Horizon host: SDK zone extensions, full-page routes, and one dynamic table column. Single source of truth shared by the app (src/integration/zones.js drives registration from it) and the netsapiens-horizon-testing Playwright suite (asserts each testId mounts). testId scheme: extensions 'sdk-testapp-ext-<id minus the app prefix>', routes 'sdk-testapp-page-<slug>', columns 'sdk-testapp-col-<field>'. ⚠ 'render' names which registration path each extension takes, and they are mutually exclusive: 'component' means the app draws it and the marker (data-testid + data-zone) rides on the widget's OWN root element; 'actions' means the app DECLARES a button and the HOST draws it in the house style (SDK 0.2.6), so only data-testid is emitted — there is no data-zone on those three. The host rejects and logs a registration carrying both or neither. Either way assert VISIBILITY (toBeVisible) on the testId; a component that renders null (an inactive zone) has no marker, which is the accurate signal. 'requiredScopes' is a NARROWING request, never a grant — the host intersects it with the gate of the page, so it cannot reveal anything a user could not already reach. 'version' mirrors package.json and is the value to register the app under: the remote entry URL is stable, so the registered version is the only thing that tells Horizon to re-verify the bytes at that URL.",
   "appId": "minimal-remote",
   "webpackModule": "minimalRemote",
   "remoteEntryUrl": "https://netsapiens.github.io/horizon-sdk-testapp/remoteEntry.js",
-  "version": "1.2.1",
-  "$zoneCoverage": "All 12 INJECTABLE zones in the host catalogue (SDKSettings.tsx ZONE_CATALOGUE). The other 5 catalogue entries are Navigation zones, which are not injection points \u2014 they gate which nav sections an app may add PAGES to, and are covered by 'routes' below. nav-marketplace is reserved to the built-in marketplace and can never be covered by a third-party app.",
+  "version": "1.3.0",
+  "$zoneCoverage": "All 12 INJECTABLE zones in the host catalogue (SDKSettings.tsx ZONE_CATALOGUE). The other 5 catalogue entries are Navigation zones, which are not injection points — they gate which nav sections an app may add PAGES to, and are covered by 'routes' below. nav-marketplace is reserved to the built-in marketplace and can never be covered by a third-party app.",
   "extensions": [
     {
       "id": "testapp-header-action",
@@ -15,7 +15,8 @@
         "/manage/*/contacts"
       ],
       "testId": "sdk-testapp-ext-header-action",
-      "label": "Header action button"
+      "label": "Header action button",
+      "render": "actions"
     },
     {
       "id": "testapp-header-badge",
@@ -25,7 +26,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-header-badge",
-      "label": "Secondary header badge"
+      "label": "Secondary header badge",
+      "render": "component"
     },
     {
       "id": "testapp-content-panel",
@@ -35,7 +37,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-content-panel",
-      "label": "Panel appended after page content"
+      "label": "Panel appended after page content",
+      "render": "component"
     },
     {
       "id": "testapp-sidetray-panel",
@@ -46,7 +49,8 @@
       ],
       "testId": "sdk-testapp-ext-sidetray-panel",
       "label": "Side-tray section",
-      "$note": "Not covered by horizon-sdk-demo \u2014 this zone had no test coverage before the testapp cutover."
+      "$note": "Not covered by horizon-sdk-demo — this zone had no test coverage before the testapp cutover.",
+      "render": "component"
     },
     {
       "id": "testapp-table-toolbar",
@@ -56,7 +60,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-table-toolbar",
-      "label": "Table toolbar item"
+      "label": "Table toolbar item",
+      "render": "actions"
     },
     {
       "id": "testapp-table-filter",
@@ -66,7 +71,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-table-filter",
-      "label": "Table filter-bar control"
+      "label": "Table filter-bar control",
+      "render": "component"
     },
     {
       "id": "testapp-row-action",
@@ -76,7 +82,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-row-action",
-      "label": "Per-row action button"
+      "label": "Per-row action button",
+      "render": "component"
     },
     {
       "id": "testapp-topbar-help",
@@ -85,7 +92,8 @@
         "/*"
       ],
       "testId": "sdk-testapp-ext-topbar-help",
-      "label": "Global top-bar action"
+      "label": "Global top-bar action",
+      "render": "actions"
     },
     {
       "id": "testapp-caller-card",
@@ -95,7 +103,8 @@
       ],
       "testId": "sdk-testapp-ext-caller-card",
       "label": "Inbound-call content card",
-      "$state": "Requires a live ringing call to render \u2014 the suite marks this fixme rather than faking call state."
+      "$state": "Requires a live ringing call to render — the suite marks this fixme rather than faking call state.",
+      "render": "component"
     },
     {
       "id": "testapp-form-before",
@@ -105,7 +114,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-form-before",
-      "label": "Banner above a form section"
+      "label": "Banner above a form section",
+      "render": "component"
     },
     {
       "id": "testapp-form-after",
@@ -115,7 +125,8 @@
         "/manage/*/users"
       ],
       "testId": "sdk-testapp-ext-form-after",
-      "label": "Checkbox below a form section"
+      "label": "Checkbox below a form section",
+      "render": "component"
     }
   ],
   "routes": [
@@ -133,7 +144,8 @@
       "parentPath": "/manage",
       "path": "sdk-testapp",
       "fullPath": "/manage/sdk-testapp",
-      "testId": "sdk-testapp-page-manage"
+      "testId": "sdk-testapp-page-manage",
+      "requiredScopes": "ADMINS"
     },
     {
       "id": "testapp-platform-page",
@@ -141,7 +153,8 @@
       "parentPath": "/platform",
       "path": "sdk-testapp",
       "fullPath": "/platform/sdk-testapp",
-      "testId": "sdk-testapp-page-platform"
+      "testId": "sdk-testapp-page-platform",
+      "requiredScopes": "ADMINS"
     },
     {
       "id": "testapp-home-page",
@@ -164,5 +177,7 @@
       "testId": "sdk-testapp-col-testapp-marker",
       "$note": "The host's DataTable derives the `call-logs-columns` zone from the route and merges registered columns into the grid. `table-columns` is the catalogue's name for the capability; `call-logs-columns` is the concrete zone id the host emits for this page."
     }
-  ]
+  ],
+  "sdkVersion": "^0.2.6",
+  "$scopeNote": "Only the /manage and /platform routes declare requiredScopes, and they declare the tier those sections already floor at (ADMINS). That is deliberate: it exercises the 0.2.4 scope-declaration contract end to end while remaining a no-op in effect, so the suite's outcome does not depend on which scope it authenticates as. Declaring something NARROWER than the page floor (e.g. PLATFORM on an ADMINS page) would be a stronger test of intersection but would silently start failing if this suite is ever run as a Reseller."
 }
