@@ -1,8 +1,8 @@
-// The exposed entry point the Horizon host mounts for this extension.
+// The exposed entry point the Flow host mounts for this extension.
 //
 // ⚠️ THE EXPOSE MUST BE NAMED './App'. The host hardcodes `module="./App"` when
 // it builds the <RemoteComponent> for every registered extension
-// (HorizonAppsLoader.tsx). An earlier version of this app exposed './mod', which
+// (FlowAppsLoader.tsx). An earlier version of this app exposed './mod', which
 // verified perfectly and then failed at runtime with "Module ./mod does not
 // exist in container" — the bundle was fine, the contract was not.
 //
@@ -11,12 +11,12 @@
 // possible toolchain, so nothing here should need a transform. React.createElement
 // aliased to `h` is the whole compromise.
 //
-// Registration goes through @netsapiens/horizon-sdk, the same path a partner
+// Registration goes through @netsapiens/flow-sdk, the same path a partner
 // uses. Emitting on the event bus directly would test the host's internal
 // contract rather than the one anybody actually writes against.
 import React from 'react';
 import log from 'loglevel';
-import { useRemoteApp } from '@netsapiens/horizon-sdk';
+import { useRemoteApp } from '@netsapiens/flow-sdk';
 
 import {
   EXTENSIONS,
@@ -25,6 +25,7 @@ import {
   manifest,
   sdkRef,
 } from './integration/zones.js';
+import { StreamsPanel, contextRef } from './integration/streams.js';
 
 const h = React.createElement;
 
@@ -90,6 +91,7 @@ function TestPage(props) {
       'Lazy chunk result: ',
       h('code', null, heavyResult),
     ),
+    props.streamsPanel ? h(StreamsPanel) : null,
   );
 }
 
@@ -102,6 +104,7 @@ function pageFor(route) {
       title: 'SDK Test App — ' + route.parentPath,
       where: route.parentPath + '/' + route.path,
       testId: route.testId,
+      streamsPanel: route.streamsPanel,
     });
   }
   Page.displayName = 'TestAppPage(' + route.id + ')';
@@ -140,9 +143,9 @@ export async function run() {
 /**
  * The component the host mounts. It renders nothing visible: its job is to
  * register contributions and then stay mounted for the life of the session,
- * which is the documented shape for a Horizon extension entry point.
+ * which is the documented shape for a Flow extension entry point.
  */
-export default function App(horizonContext) {
+export default function App(flowContext) {
   // ⚠️ REGISTER THROUGH THE SDK, NOT BY EMITTING ON THE EVENT BUS.
   //
   // The raw `eventBus.emit('route:register', ...)` calls this used to make are
@@ -151,7 +154,7 @@ export default function App(horizonContext) {
   // past: validateRouteConfig() refusing a malformed route with a log instead of
   // an emit, appId derivation, unregister bookkeeping. A test app that bypasses
   // that layer can pass while every partner's code fails, and the reverse.
-  const { sdk } = useRemoteApp(horizonContext, MF_NAME);
+  const { sdk } = useRemoteApp(flowContext, MF_NAME);
 
   React.useEffect(
     function register() {
@@ -160,6 +163,9 @@ export default function App(horizonContext) {
       // Hand the SDK to the zone widgets. The header action uses it to open the
       // side tray, which is the only way the `sidetray` zone gets a mount point.
       sdkRef.current = sdk;
+      // The streams bench needs the SDK and who is signed in (own extension,
+      // own domain) and the API proxy for its trigger.
+      contextRef.current = { sdk: sdk, user: flowContext.user, api: flowContext.api };
 
       // registerRoute is async — it validates before emitting. Sequenced rather
       // than fired in parallel so the log reads in registration order when

@@ -3,7 +3,7 @@
   "appId": "minimal-remote",
   "webpackModule": "minimalRemote",
   "remoteEntryUrl": "https://netsapiens.github.io/horizon-sdk-testapp/remoteEntry.js",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "$zoneCoverage": "All 12 INJECTABLE zones in the host catalogue (SDKSettings.tsx ZONE_CATALOGUE). The other 5 catalogue entries are Navigation zones, which are not injection points — they gate which nav sections an app may add PAGES to, and are covered by 'routes' below. nav-marketplace is reserved to the built-in marketplace and can never be covered by a third-party app.",
   "extensions": [
     {
@@ -136,7 +136,8 @@
       "parentPath": "/apps",
       "path": "sdk-testapp",
       "fullPath": "/apps/sdk-testapp",
-      "testId": "sdk-testapp-page-apps"
+      "testId": "sdk-testapp-page-apps",
+      "streamsPanel": true
     },
     {
       "id": "testapp-manage-page",
@@ -178,6 +179,65 @@
       "$note": "The host's DataTable derives the `call-logs-columns` zone from the route and merges registered columns into the grid. `table-columns` is the catalogue's name for the capability; `call-logs-columns` is the concrete zone id the host emits for this page."
     }
   ],
-  "sdkVersion": "^0.2.6",
-  "$scopeNote": "Only the /manage and /platform routes declare requiredScopes, and they declare the tier those sections already floor at (ADMINS). That is deliberate: it exercises the 0.2.4 scope-declaration contract end to end while remaining a no-op in effect, so the suite's outcome does not depend on which scope it authenticates as. Declaring something NARROWER than the page floor (e.g. PLATFORM on an ADMINS page) would be a stronger test of intersection but would silently start failing if this suite is ever run as a Reseller."
+  "sdkVersion": "0.3.0",
+  "$scopeNote": "Only the /manage and /platform routes declare requiredScopes, and they declare the tier those sections already floor at (ADMINS). That is deliberate: it exercises the 0.2.4 scope-declaration contract end to end while remaining a no-op in effect, so the suite's outcome does not depend on which scope it authenticates as. Declaring something NARROWER than the page floor (e.g. PLATFORM on an ADMINS page) would be a stronger test of intersection but would silently start failing if this suite is ever run as a Reseller.",
+  "$streamsNote": "The sdk.streams bench, rendered on the /apps page only (routes[].streamsPanel), which every scope can reach. Subscribe opens every stream below; each row (testId) carries data-state (idle|pending|live|refused|unavailable|unconfirmed|skipped|error; skipped = own-user/own-calls for a user with no extension), data-events (count received), data-open and data-closed. Trigger writes a marker into the signed-in user's own status message and restores it, which must raise data-events on 'presence' and 'own-user'. 'refused' is a valid outcome where the scope or grant does not allow a stream (queues for a Basic User) — assert the reason, not 'live'. Teardown: rows report closed here, and the host's SDK Diagnostics page must stop listing this app's subscriptions; the SDK drops deliveries to a closed handle, so the app alone cannot prove the host let go.",
+  "streams": [
+    {
+      "id": "presence",
+      "call": "presence.onDomain",
+      "grant": "presence",
+      "testId": "sdk-testapp-stream-presence",
+      "label": "Presence (domain)",
+      "triggered": true
+    },
+    {
+      "id": "own-user",
+      "call": "subscribers.onUser(self)",
+      "grant": "subscribers",
+      "testId": "sdk-testapp-stream-own-user",
+      "label": "Own user record",
+      "triggered": true
+    },
+    {
+      "id": "own-devices",
+      "call": "devices.onDomain",
+      "grant": "devices",
+      "testId": "sdk-testapp-stream-own-devices",
+      "label": "Device registration",
+      "triggered": false
+    },
+    {
+      "id": "own-calls",
+      "call": "calls.onExtension(self)",
+      "grant": "calls.user",
+      "testId": "sdk-testapp-stream-own-calls",
+      "label": "Own extension's calls",
+      "triggered": false
+    },
+    {
+      "id": "softphone",
+      "call": "softphone.onCallStarted + onCallEnded",
+      "grant": "softphone",
+      "testId": "sdk-testapp-stream-softphone",
+      "label": "Own softphone",
+      "triggered": false
+    },
+    {
+      "id": "notifications",
+      "call": "notifications.onNotification",
+      "grant": "notifications.read",
+      "testId": "sdk-testapp-stream-notifications",
+      "label": "Notifications",
+      "triggered": false
+    },
+    {
+      "id": "queues",
+      "call": "queues.onDomainQueues({ stats })",
+      "grant": "queues",
+      "testId": "sdk-testapp-stream-queues",
+      "label": "Queue stats (domain)",
+      "triggered": false
+    }
+  ]
 }

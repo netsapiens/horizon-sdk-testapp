@@ -65,14 +65,11 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # The full contract checker shipped in @netsapiens/horizon-sdk. Catching a
-      # violation here beats a rejected submission.
-      #
-      # ⚠️ Invoked with `node`, NOT `npx horizon-verify-bundle`. In SDK 0.2.0 the
-      # packaged bin silently no-ops and exits 0 — its main-module guard compared
-      # basename(argv[1]) against "verify-bundle", which is false once npm links it
-      # as "horizon-verify-bundle". A CI step calling it passes unconditionally.
-      # Fixed in 0.2.1; switch to npx once this repo is on it.
+      # The full contract checker shipped in @netsapiens/flow-sdk, run through its
+      # `flow-verify-bundle` bin. Catching a violation here beats a rejected
+      # submission. (The bin's main-module guard resolves symlinks, so it runs
+      # under its linked name — the 0.2.0 no-op that once made this step pass
+      # unconditionally cannot recur.)
       - name: Check the bundle contract
         run: npm run verify
 
