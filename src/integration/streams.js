@@ -93,6 +93,12 @@ const OPENERS = {
   },
 };
 
+/**
+ * Streams about the user's own extension. A session without one (a system
+ * Super User, say) shows these as `skipped`, not as an error.
+ */
+const NEEDS_EXTENSION = ['own-user', 'own-calls'];
+
 /** Several handles behaving as one. */
 function combine(subs) {
   return {
@@ -219,6 +225,12 @@ export function StreamsPanel() {
     if (!ctx) return;
     manifest.streams.forEach(function (s) {
       if (handles.current[s.id]) return;
+      if (NEEDS_EXTENSION.indexOf(s.id) !== -1 && !(ctx.user && ctx.user.extension)) {
+        patch(s.id, function () {
+          return { state: 'skipped', detail: 'signed-in user has no extension' };
+        });
+        return;
+      }
       const count = function (event) {
         patch(s.id, function (r) {
           return { events: r.events + 1, lastEvent: event };
@@ -324,7 +336,7 @@ export function StreamsPanel() {
       h('button', { 'data-testid': 'sdk-testapp-streams-unsubscribe', onClick: unsubscribeAll, disabled: !anyOpen }, 'Unsubscribe'),
       h(
         'button',
-        { 'data-testid': 'sdk-testapp-streams-trigger', onClick: runTrigger, disabled: !anyOpen || trigger === 'running' },
+        { 'data-testid': 'sdk-testapp-streams-trigger', onClick: runTrigger, disabled: !anyOpen || trigger === 'running' || !(ctx.user && ctx.user.extension) },
         'Trigger an update',
       ),
       h('code', { 'data-testid': 'sdk-testapp-streams-trigger-result' }, trigger),
