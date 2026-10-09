@@ -1,7 +1,8 @@
 # horizon-sdk-testapp
 
-A deliberately minimal Module Federation remote, used to validate the Horizon
-**bundle-verification build contract** without the noise of a full application.
+A deliberately minimal Module Federation remote, used to validate the Flow
+**bundle-verification build contract** without the noise of a full application,
+and to check `sdk.streams` end to end. Built on `@netsapiens/flow-sdk`.
 
 It exists because the reference demo is too large to reason about when something
 goes wrong: it has React, MUI, four shared dependencies and a standalone page, so
@@ -24,7 +25,7 @@ npm run build                 # emits dist/v1.0.0/
 npm run verify                # runs the platform's own preflight checks
 ```
 
-`npm run verify` invokes `horizon-verify-bundle` from `@netsapiens/horizon-sdk` —
+`npm run verify` invokes `flow-verify-bundle` from `@netsapiens/flow-sdk` —
 the same checks the platform runs when a version is submitted, so a pass here
 means a pass there.
 
@@ -59,6 +60,39 @@ container global.
 Note the failure surfaces to the page as a bare `script error event`: the browser
 gives no way to distinguish an integrity failure from a network failure, which is
 why the host does a deliberate fetch-and-hash on the error path.
+
+## The streams bench
+
+The `/apps/sdk-testapp` page carries a live-data bench, driven by the `streams`
+section of `src/integration/zones.manifest.json`:
+
+1. **SDK checks** — the bundle was built against the Flow SDK version the manifest
+   names (`sdkVersion`), every `sdk.streams` method of the 0.3.0 contract is
+   present, and the 0.2.x stream API is gone.
+2. **Subscribe** opens seven streams covering every grant a normal user can hold:
+   presence, own user record, device registration, own extension's calls, own
+   softphone, notifications, and domain queue stats. Each row shows its status
+   (`pending` → `live`, or `refused` with the reason) and counts the events it
+   receives.
+3. **Trigger an update** writes a marker into the signed-in user's own status
+   message and puts the original back, so the presence and own-user rows receive
+   data without anyone having to make a call. Calls and softphone rows count
+   when you place a call.
+4. **Unsubscribe** closes every handle. The rows report closed; whether the host
+   really let go is shown on the host's **SDK Diagnostics** page, which lists
+   every live stream subscription by app — this app's rows must disappear. (The
+   SDK drops anything delivered to a closed handle, so the app alone cannot see
+   a leak.)
+
+Leaving the page closes anything still open.
+
+Rows carry `data-state`, `data-events`, `data-open` and `data-closed` for the
+Playwright suite. `refused` is a correct result where the user's scope or the
+app's approved grants do not allow a stream — a Basic User is refused domain
+queue stats.
+
+The app only gets the grants the platform derived from its bundle when it was
+submitted, so register a new version after changing which streams it opens.
 
 ## What this app is not
 
