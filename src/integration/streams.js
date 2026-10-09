@@ -74,9 +74,16 @@ const OPENERS = {
     const started = streams.softphone.onCallStarted(function (e) {
       count('call-started', e);
     }, { onStatus: onStatus });
-    const ended = streams.softphone.onCallEnded(function (e) {
-      count('call-ended', e);
-    });
+    let ended;
+    try {
+      ended = streams.softphone.onCallEnded(function (e) {
+        count('call-ended', e);
+      });
+    } catch (err) {
+      // Do not leave the first handle open with nothing tracking it.
+      started.unsubscribe();
+      throw err;
+    }
     return combine([started, ended]);
   },
   notifications: function (streams, count, onStatus) {
@@ -173,7 +180,23 @@ function sdkChecks(sdk) {
  * user's own record, so both streams have something to receive. Nothing else is
  * touched, and the restore runs even if reading the marker back fails.
  */
-async function triggerUpdate(ctx) {
+let triggerInFlight = null;
+
+/**
+ * One trigger at a time, across every mounted panel: two overlapping runs
+ * would each read the other's marker as "the original" and could restore it,
+ * leaving the marker in the user's status message.
+ */
+function triggerUpdate(ctx) {
+  if (!triggerInFlight) {
+    triggerInFlight = runTrigger(ctx).finally(function () {
+      triggerInFlight = null;
+    });
+  }
+  return triggerInFlight;
+}
+
+async function runTrigger(ctx) {
   const path = '/domains/' + ctx.user.domain + '/users/' + ctx.user.extension;
   const current = await ctx.api.get(path);
   const original = (current && current['status-message']) || '';
@@ -264,7 +287,6 @@ export function StreamsPanel() {
   const unsubscribeAll = React.useCallback(function () {
     Object.keys(handles.current).forEach(function (id) {
       const sub = handles.current[id];
-      delete handles.current[id];
       // Only the public contract: unsubscribe, then unsubscribe again, which
       // the SDK promises is safe. Whether the host let go is the Diagnostics
       // page's to show — see the note at the top of this file.
@@ -276,8 +298,11 @@ export function StreamsPanel() {
         closed = false;
         log.error(TAG + ' closing ' + id + ' threw', err);
       }
+      // A handle that failed to close stays tracked, so Unsubscribe (or
+      // leaving the page) can try it again.
+      if (closed) delete handles.current[id];
       patch(id, function () {
-        return { open: false, closed: closed };
+        return { open: !closed, closed: closed };
       });
     });
     log.info(TAG + ' closed every stream');
@@ -288,7 +313,11 @@ export function StreamsPanel() {
   React.useEffect(function () {
     return function () {
       Object.keys(handles.current).forEach(function (id) {
-        handles.current[id].unsubscribe();
+        try {
+          handles.current[id].unsubscribe();
+        } catch (err) {
+          log.error(TAG + ' closing ' + id + ' on unmount threw', err);
+        }
       });
       handles.current = {};
     };
