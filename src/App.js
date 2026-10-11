@@ -77,7 +77,8 @@ function TestPage(props) {
     h(
       'p',
       null,
-      'Registered by ' + APP_ID + ' at ' + props.where + '. If you can read this, the ',
+      'Registered by ' + APP_ID + ' ' + manifest.version + ' at ' + props.where +
+        '. If you can read this, the ',
       'remote loaded, the SRI pin matched, and the route registration reached the host.',
     ),
     h(
