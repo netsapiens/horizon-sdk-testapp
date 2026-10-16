@@ -124,7 +124,7 @@ function combine(subs) {
 // The SDK self-check
 // ---------------------------------------------------------------------------
 
-/** Every `sdk.streams` method the 0.3.0 contract promises. */
+/** Every `sdk.streams` method the 0.3.0 contract promises (unchanged through 0.3.7). */
 const CONTRACT = {
   calls: ['onDomainCalls', 'onExtension'],
   queues: ['onQueue', 'onDomainQueues'],
@@ -160,6 +160,8 @@ function sdkChecks(sdk) {
   add('every streams method', missing.length === 0, missing.length ? 'missing: ' + missing.join(', ') : '');
   // The 0.2.x surface must be gone: an app still able to call it would be on
   // the wrong package, or the wrong version of it.
+  // 0.3.7: an app raises a platform notification with a plain call.
+  add('sdk.sendNotification present', sdk && typeof sdk.sendNotification === 'function');
   add(
     '0.2.x stream API removed',
     sdk && typeof sdk.subscribeToStream !== 'function' && typeof sdk.subscribeToCallEvents !== 'function',
@@ -218,7 +220,7 @@ async function runTrigger(ctx) {
 
 function initialRows() {
   return manifest.streams.map(function (s) {
-    return { id: s.id, open: false, state: 'idle', detail: '', events: 0, lastEvent: '', closed: null };
+    return { id: s.id, open: false, state: 'idle', detail: '', reason: '', message: '', events: 0, lastEvent: '', closed: null };
   });
 }
 
@@ -263,6 +265,10 @@ export function StreamsPanel() {
         patch(s.id, function () {
           return {
             state: status.state,
+            // Separate from `detail` so the suite can assert a refusal's
+            // reason without parsing the row's text.
+            reason: status.state === 'refused' ? status.reason : '',
+            message: status.state === 'refused' ? status.message : '',
             detail: status.state === 'refused' ? status.reason + ': ' + status.message
               : status.state === 'live' ? (status.snapshot ? 'snapshot' : 'no snapshot')
               : '',
@@ -396,10 +402,12 @@ export function StreamsPanel() {
               'data-events': String(r.events),
               'data-open': r.open ? 'yes' : 'no',
               'data-closed': r.closed === null ? '' : r.closed ? 'yes' : 'no',
+              'data-reason': r.reason,
+              'data-message': r.message,
             },
             h('td', null, s.label),
             h('td', null, h('code', null, s.call)),
-            h('td', null, r.state + (r.detail ? ' (' + r.detail + ')' : '')),
+            h('td', { 'data-testid': s.testId + '-status' }, r.state + (r.detail ? ' (' + r.detail + ')' : '')),
             h('td', null, String(r.events)),
             h('td', null, r.lastEvent),
             h('td', null, r.open ? 'open' : r.closed ? 'closed' : '—'),

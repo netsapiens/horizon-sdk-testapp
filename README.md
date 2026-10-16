@@ -2,7 +2,7 @@
 
 A deliberately minimal Module Federation remote, used to validate the Flow
 **bundle-verification build contract** without the noise of a full application,
-and to check `sdk.streams` end to end. Built on `@netsapiens/flow-sdk`.
+to check `sdk.streams` end to end, and to round-trip `sdk.sendNotification`. Built on `@netsapiens/flow-sdk`.
 
 It exists because the reference demo is too large to reason about when something
 goes wrong: it has React, MUI, four shared dependencies and a standalone page, so
@@ -67,8 +67,8 @@ The `/apps/sdk-testapp` page carries a live-data bench, driven by the `streams`
 section of `src/integration/zones.manifest.json`:
 
 1. **SDK checks** — the bundle was built against the Flow SDK version the manifest
-   names (`sdkVersion`), every `sdk.streams` method of the 0.3.0 contract is
-   present, and the 0.2.x stream API is gone.
+   names (`sdkVersion`, 0.3.7), every `sdk.streams` method of the 0.3.x contract
+   is present, `sdk.sendNotification` is there, and the 0.2.x stream API is gone.
 2. **Subscribe** opens seven streams covering every grant a normal user can hold:
    presence, own user record, device registration, own extension's calls, own
    softphone, notifications, and domain queue stats. Each row shows its status
@@ -87,15 +87,42 @@ section of `src/integration/zones.manifest.json`:
 Leaving the page closes anything still open.
 
 Rows carry `data-state`, `data-events`, `data-open` and `data-closed` for the
-Playwright suite. `refused` is a correct result where the user's scope or the
+Playwright suite, plus `data-reason` and `data-message` once a stream is refused
+(the reason is one of `not-granted`, `scope`, `no-source` or `invalid`; the
+message is the host's own text). Each row's status cell is `<row testId>-status`. `refused` is a correct result where the user's scope or the
 app's approved grants do not allow a stream — a Basic User is refused domain
 queue stats.
 
 The app only gets the grants the platform derived from its bundle when it was
 submitted, so register a new version after changing which streams it opens.
 
+## The notifications panel
+
+The `/home/sdk-testapp` page carries the `sdk.sendNotification` round trip,
+driven by the `notifications` section of the manifest:
+
+1. **Send** raises a real Flow notification for the signed-in user, with the
+   title, body, severity, link and optional id from the form. The link defaults
+   to `/apps/sdk-testapp`, another page this app registers, so clicking the
+   entry in the notification center has somewhere observable to go.
+2. **Received** subscribes to `sdk.streams.notifications` while the page is
+   open. Each arrival is a row carrying `data-notification-id` (the same id the
+   host's bell uses, `notification-center-notification-<id>`), `data-category`
+   (`app` for one an app raised), `data-severity`, `data-title` and `data-link`.
+
+It sits on `/home` rather than beside the streams bench on purpose: its feed
+holds a subscription for as long as the page is open, and the bench's teardown
+check expects the host to hold none for this app after Unsubscribe.
+
+`sdk.sendNotification({ … })` is a plain call in `src/integration/notifications.js`.
+The platform finds it in the bundle when a version is submitted; behind a helper
+or a computed name it would not be found. Sending is fire-and-forget: if the
+host refuses it (the capability switched off in SDK Settings, or a host or
+server without app notifications), the browser console says why and
+nothing arrives.
+
 ## What this app is not
 
-Not a reference for partners — that is `horizon-sdk-demo`, which is a realistic
+Not a reference for partners — that is `flow-sdk-demo` (formerly `horizon-sdk-demo`), which is a realistic
 application. This one is a test fixture, and its `shared` block is intentionally
 smaller than any real extension's.

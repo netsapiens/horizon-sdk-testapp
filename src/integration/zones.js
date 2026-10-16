@@ -298,6 +298,7 @@ export const ROUTES = manifest.routes.map(function (r) {
   };
   if (r.requiredScopes) route.requiredScopes = r.requiredScopes;
   if (r.streamsPanel) route.streamsPanel = true;
+  if (r.notificationsPanel) route.notificationsPanel = true;
   return route;
 });
 
