@@ -26,6 +26,15 @@ CI refuses to publish changed bundle inputs under an unchanged version, which is
 the only thing standing between a forgotten bump and that outcome. Do not work
 around it.
 
+**The suite has the same trap, in the other order.** netsapiens-horizon-testing
+deploys whatever version its fixture copy of `zones.manifest.json` names. If
+that fixture is synced to a new version before Pages serves the new bytes, the
+suite pins the new version number to the **old** bytes. Once the real bytes
+land, deploying the same number again is refused (a supplied version must be
+greater than the current one), and every host fails integrity. That is how 2.1.0
+got stuck on core2 on 2026-10-16, and why 2.1.1 exists. So: merge here, wait for
+the Pages deploy, and only then merge the suite's fixture sync.
+
 ---
 
 ## The requirements, and where each is satisfied
