@@ -26,6 +26,7 @@ import {
   sdkRef,
 } from './integration/zones.js';
 import { StreamsPanel, contextRef } from './integration/streams.js';
+import { NotificationsPanel } from './integration/notifications.js';
 
 const h = React.createElement;
 
@@ -93,6 +94,7 @@ function TestPage(props) {
       h('code', null, heavyResult),
     ),
     props.streamsPanel ? h(StreamsPanel) : null,
+    props.notificationsPanel ? h(NotificationsPanel) : null,
   );
 }
 
@@ -106,6 +108,7 @@ function pageFor(route) {
       where: route.parentPath + '/' + route.path,
       testId: route.testId,
       streamsPanel: route.streamsPanel,
+      notificationsPanel: route.notificationsPanel,
     });
   }
   Page.displayName = 'TestAppPage(' + route.id + ')';
@@ -164,7 +167,7 @@ export default function App(flowContext) {
       // Hand the SDK to the zone widgets. The header action uses it to open the
       // side tray, which is the only way the `sidetray` zone gets a mount point.
       sdkRef.current = sdk;
-      // The streams bench needs the SDK and who is signed in (own extension,
+      // The streams bench and the notifications panel need the SDK and who is signed in (own extension,
       // own domain) and the API proxy for its trigger.
       contextRef.current = { sdk: sdk, user: flowContext.user, api: flowContext.api };
 
