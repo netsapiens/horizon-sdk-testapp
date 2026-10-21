@@ -223,7 +223,27 @@ export default function App(flowContext) {
           await sdk.registerRoute(route);
         }
         if (cancelled) return;
-        await sdk.registerRoute(Object.assign({}, DOMAIN_ROUTE, { component: DomainPage }));
+        // ⚠️ INLINE LITERALS, unlike the manifest-driven routes above. The
+        // platform's bundle analyser reads parentPath, path and requiredScopes
+        // from the call site; built from DOMAIN_ROUTE it would miss this route
+        // and its ADMINS gate in the Registered Apps catalogue. The manifest
+        // stays the suite's source, so say loudly if the two drift.
+        if (
+          DOMAIN_ROUTE.parentPath !== '/manage/:domain' ||
+          DOMAIN_ROUTE.path !== 'sdk-testapp-domain' ||
+          DOMAIN_ROUTE.requiredScopes !== 'ADMINS'
+        ) {
+          log.warn('[' + APP_ID + '] domain route literals have drifted from zones.manifest.json');
+        }
+        await sdk.registerRoute({
+          id: DOMAIN_ROUTE.id,
+          parentPath: '/manage/:domain',
+          path: 'sdk-testapp-domain',
+          label: DOMAIN_ROUTE.label,
+          icon: DOMAIN_ROUTE.icon,
+          requiredScopes: 'ADMINS',
+          component: DomainPage,
+        });
         EXTENSIONS.forEach(function (ext) {
           if (!cancelled) sdk.registerDynamicExtension(ext);
         });
