@@ -16,9 +16,10 @@
 // contract rather than the one anybody actually writes against.
 import React from 'react';
 import log from 'loglevel';
-import { useRemoteApp } from '@netsapiens/flow-sdk';
+import { FlowContextProvider, useManagingDomain, useRemoteApp } from '@netsapiens/flow-sdk';
 
 import {
+  DOMAIN_ROUTE,
   EXTENSIONS,
   ROUTES as ZONE_ROUTES,
   buildColumn,
@@ -115,6 +116,34 @@ function pageFor(route) {
   return Page;
 }
 
+/**
+ * What the domain-scoped page shows: the domain the SDK says is being managed.
+ *
+ * Rendered under FlowContextProvider by the page App builds (below), so it reads
+ * useManagingDomain() the way a partner's page does. The marker carries the
+ * value as text and as data-managing ('null' / 'undefined' spelled out), so the
+ * suite can assert the exact value.
+ */
+function ManagingDomainReadout() {
+  const { managing } = useManagingDomain();
+  const value = String(managing);
+  return h(
+    'div',
+    { style: { padding: 24 }, 'data-testid': manifest.domainRoute.testId },
+    h('h2', null, 'SDK Test App — managed domain'),
+    h(
+      'p',
+      null,
+      'useManagingDomain(): ',
+      h(
+        'code',
+        { 'data-testid': manifest.domainRoute.markerTestId, 'data-managing': value },
+        value,
+      ),
+    ),
+  );
+}
+
 // Routes carry their page component; the zone extensions and the dynamic column
 // come ready-built from integration/zones.js.
 const ROUTES = ZONE_ROUTES.map(function (r) {
@@ -160,6 +189,20 @@ export default function App(flowContext) {
   // that layer can pass while every partner's code fails, and the reverse.
   const { sdk } = useRemoteApp(flowContext, MF_NAME);
 
+  // ⚠️ FROZEN ON PURPOSE. The README's page pattern: memoised with [] so the page
+  // keeps one component identity, which means it closes over the FIRST
+  // flowContext forever. FlowContextProvider is what has to keep it current,
+  // including for a domain switched while this page was not mounted (fixed in
+  // flow-sdk 0.3.8). Passing the live flowContext here would hide that bug.
+  const DomainPage = React.useMemo(function () {
+    function DomainPage() {
+      return h(FlowContextProvider, { context: flowContext }, h(ManagingDomainReadout));
+    }
+    DomainPage.displayName = 'TestAppPage(' + DOMAIN_ROUTE.id + ')';
+    return DomainPage;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   React.useEffect(
     function register() {
       let cancelled = false;
@@ -179,6 +222,8 @@ export default function App(flowContext) {
           if (cancelled) return;
           await sdk.registerRoute(route);
         }
+        if (cancelled) return;
+        await sdk.registerRoute(Object.assign({}, DOMAIN_ROUTE, { component: DomainPage }));
         EXTENSIONS.forEach(function (ext) {
           if (!cancelled) sdk.registerDynamicExtension(ext);
         });
@@ -188,7 +233,7 @@ export default function App(flowContext) {
         if (!cancelled) sdk.registerDynamicColumn(column);
         if (!cancelled) {
           log.info(
-            '[' + APP_ID + '] registered ' + ROUTES.length + ' routes, ' +
+            '[' + APP_ID + '] registered ' + (ROUTES.length + 1) + ' routes, ' +
               EXTENSIONS.length + ' zone extensions, 1 dynamic column via SDK',
           );
         }
@@ -200,13 +245,14 @@ export default function App(flowContext) {
         ROUTES.forEach(function (route) {
           sdk.unregisterRoute(route.id);
         });
+        sdk.unregisterRoute(DOMAIN_ROUTE.id);
         EXTENSIONS.forEach(function (ext) {
           sdk.unregisterDynamicExtension(ext.id);
         });
         sdk.unregisterDynamicColumn(column.id);
       };
     },
-    [sdk],
+    [sdk, DomainPage],
   );
 
   return null;

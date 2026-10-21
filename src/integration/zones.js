@@ -303,6 +303,24 @@ export const ROUTES = manifest.routes.map(function (r) {
 });
 
 /**
+ * The domain-scoped page: one registration under /manage/:domain serves every
+ * domain. Kept apart from ROUTES because its page component needs the app's
+ * flowContext (App.js builds it), and because the suite visits each ROUTES
+ * entry's literal fullPath, which a :domain pattern doesn't have.
+ */
+export const DOMAIN_ROUTE = {
+  id: manifest.appId + '.' + manifest.domainRoute.id,
+  parentPath: manifest.domainRoute.parentPath,
+  path: manifest.domainRoute.path,
+  // In the manifest too: the suite reopens the page by clicking this menu entry.
+  label: manifest.domainRoute.label,
+  icon: 'mdi:test-tube',
+  requiredScopes: manifest.domainRoute.requiredScopes,
+  // Assigned by App.js.
+  component: null,
+};
+
+/**
  * The dynamic column, ready for sdk.registerDynamicColumn().
  *
  * Deliberately trivial: it renders a constant marker rather than deriving
